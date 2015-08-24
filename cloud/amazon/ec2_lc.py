@@ -55,6 +55,10 @@ options:
     description:
       - A list of security groups into which instances should be found
     required: false
+  security_group_names:
+    description:
+      - A list of security group names to apply to the lc
+    required: false
   volumes:
     description:
       - a list of volume dicts, each containing device name and optionally ephemeral id or snapshot id. Size and type (and number of iops for io device type) must be specified for a new volume or a root volume, and may be passed for a snapshot volume. For any volume, a volume size less than 1 will be interpreted as a request not to create the volume.
@@ -183,6 +187,7 @@ def create_launch_config(connection, module):
     image_id = module.params.get('image_id')
     key_name = module.params.get('key_name')
     security_groups = module.params['security_groups']
+    security_group_names = module.params['security_group_names']
     user_data = module.params.get('user_data')
     volumes = module.params['volumes']
     instance_type = module.params.get('instance_type')
@@ -205,6 +210,21 @@ def create_launch_config(connection, module):
             # to be a signal not to create this volume
             if 'volume_size' not in volume or int(volume['volume_size']) > 0:
                 bdm[volume['device_name']] = create_block_device(module, volume)
+
+    if security_group_names:
+        security_groups = []
+        try:
+            ec2 = ec2_connect(module)
+            grp_details = ec2.get_all_security_groups()
+
+            for group_name in security_group_names:
+                if isinstance(group_name, basestring):
+                    group_name = [group_name]
+
+                group_id = [ str(grp.id) for grp in grp_details if str(grp.name) in group_name ]
+                security_groups.extend(group_id)
+         except boto.exception.NoAuthHandlerFound, e:
+             module.fail_json(msg = str(e))
 
     lc = LaunchConfiguration(
         name=name,
@@ -285,6 +305,7 @@ def main():
             image_id=dict(type='str'),
             key_name=dict(type='str'),
             security_groups=dict(type='list'),
+            security_group_names=dict(type='list'),
             user_data=dict(type='str'),
             kernel_id=dict(type='str'),
             volumes=dict(type='list'),
@@ -302,7 +323,10 @@ def main():
         )
     )
 
-    module = AnsibleModule(argument_spec=argument_spec)
+    module = AnsibleModule(
+        argument_spec=argument_spec,
+        mutually_exclusive = [['security_groups', 'security_group_names']]
+    )
 
     if not HAS_BOTO:
         module.fail_json(msg='boto required for this module')
