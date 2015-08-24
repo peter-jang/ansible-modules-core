@@ -223,8 +223,8 @@ def create_launch_config(connection, module):
 
                 group_id = [ str(grp.id) for grp in grp_details if str(grp.name) in group_name ]
                 security_groups.extend(group_id)
-         except boto.exception.NoAuthHandlerFound, e:
-             module.fail_json(msg = str(e))
+        except boto.exception.NoAuthHandlerFound, e:
+            module.fail_json(msg = str(e))
 
     lc = LaunchConfiguration(
         name=name,
